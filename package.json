@@ -1,10 +1,1 @@
-{
-  "name": "hiking-carpool",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Shared hiking carpool board: drivers post cars and meeting points, passengers claim seats. Everyone with the link sees the same live board.",
-  "type": "commonjs",
-  "engines": { "node": ">=18" },
-  "scripts": { "start": "node server.js" }
-}
-
+{"name":"hiking-carpool","version":"1.0.0","private":true,"description":"Shared hiking carpool board","type":"commonjs","engines":{"node":">=18"},"scripts":{"start":"node server.js"}}
