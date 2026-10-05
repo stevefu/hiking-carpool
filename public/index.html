@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hiking Carpool</title>
+<style>
+ body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f4f6f3;color:#1c2a1e}
+ header{background:#2e5d34;color:#fff;padding:16px} header h1{margin:0 0 4px;font-size:22px}
+ main{max-width:720px;margin:0 auto;padding:14px}
+ .card{background:#fff;border-radius:12px;padding:14px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+ label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+ input,textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d2c9;border-radius:8px;font-size:16px}
+ button{background:#2e5d34;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin-top:10px}
+ button.secondary{background:#e7ede7;color:#1c2a1e} button.danger{background:#a33}
+ .seats{font-weight:700} .full{color:#a33} .open{color:#2e5d34}
+ li{margin:6px 0} .small{font-size:13px;color:#555} .row{display:flex;gap:8px;flex-wrap:wrap}
+</style></head><body>
+<header><h1>🥾 Hiking Carpool</h1><div id="hikeSummary">Loading…</div></header>
+<main>
+ <section class="card"><h2>The hike</h2>
+  <label>Title <input id="h_title" placeholder="e.g. Saturday ridge hike"></label>
+  <label>Trailhead <input id="h_trailhead" placeholder="Trailhead name / address"></label>
+  <div class="row"><label style="flex:1">Date <input id="h_date" type="date"></label>
+  <label style="flex:1">Trailhead start time <input id="h_startTime" type="time"></label></div>
+  <label>Notes <textarea id="h_notes" rows="2" placeholder="Bring water, parking pass, etc."></textarea></label>
+  <button onclick="saveHike()">Save hike</button>
+ </section>
+
+ <section class="card"><h2>Drivers — add your car</h2>
+  <label>Your name <input id="c_driver" placeholder="Driver name"></label>
+  <label>Phone (optional) <input id="c_phone" type="tel"></label>
+  <label>Seats available for passengers <input id="c_seats" type="number" min="1" max="12" value="3"></label>
+  <label>Meeting place <input id="c_meeting" placeholder="Where passengers meet you"></label>
+  <label>Departure time from meeting place <input id="c_depart" type="time"></label>
+  <label>Notes <input id="c_notes" placeholder="e.g. Blue Subaru, room for packs"></label>
+  <button onclick="addCar()">Add my car</button>
+ </section>
+
+ <section id="cars"></section>
+ <p class="small">This page refreshes itself every few seconds. Everyone with this link sees the same board and can edit it — share it only with your hiking group.</p>
+</main>
+<script>
+let S={hike:{},cars:[]};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(method,path,body){const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw new Error(j.error||'Something went wrong');return j;}
+async function refresh(){try{S=await api('GET','/api/state');render();}catch(e){}}
+function render(){
+ const h=S.hike||{};
+ $('hikeSummary').textContent=[h.title,h.date,h.trailhead].filter(Boolean).join(' · ')||'Set up the hike below';
+ if(document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
+  $('h_title').value=h.title||'';$('h_trailhead').value=h.trailhead||'';$('h_date').value=h.date||'';
+  $('h_startTime').value=h.startTime||'';$('h_notes').value=h.notes||'';
+ }
+ $('cars').innerHTML=S.cars.map(car=>{
+  const left=car.seatsTotal-car.passengers.length;
+  return `<section class="card"><h2>🚗 ${esc(car.driver)}'s car</h2>
+   <p><span class="seats ${left?'open':'full'}">${left?left+' seat'+(left>1?'s':'')+' left':'Full'}</span>
+   · ${car.passengers.length}/${car.seatsTotal} passengers</p>
+   <p><b>Meet:</b> ${esc(car.meetingPlace)||'—'} ${car.departureTime?('at <b>'+esc(car.departureTime)+'</b>'):''}</p>
+   ${car.phone?`<p class="small">Phone: ${esc(car.phone)}</p>`:''}${car.notes?`<p class="small">${esc(car.notes)}</p>`:''}
+   <ul>${car.passengers.map(p=>`<li><b>${esc(p.name)}</b>${p.pickup?(' — pickup: '+esc(p.pickup)):''} ${p.phone?esc(p.phone):''}
+     <button class="secondary" onclick="removePassenger('${car.id}','${p.id}')">Remove</button></li>`).join('')}</ul>
+   ${left?`<label>Passenger name <input id="p_name_${car.id}"></label>
+   <label>Where you need pickup <input id="p_pickup_${car.id}" placeholder="Address / corner"></label>
+   <label>Phone (optional) <input id="p_phone_${car.id}" type="tel"></label>
+   <button onclick="joinCar('${car.id}')">Claim a seat</button>`:''}
+   <div class="row"><button class="secondary" onclick="editMeeting('${car.id}')">Update meeting place/time</button>
+   <button class="danger" onclick="removeCar('${car.id}')">Remove car</button></div>
+  </section>`;}).join('')||'<section class="card">No cars yet — the first driver can add one above.</section>';
+}
+async function saveHike(){try{S=await api('PUT','/api/hike',{title:$('h_title').value,trailhead:$('h_trailhead').value,date:$('h_date').value,startTime:$('h_startTime').value,notes:$('h_notes').value});render();alert('Hike saved');}catch(e){alert(e.message)}}
+async function addCar(){try{S=await api('POST','/api/cars',{driver:$('c_driver').value,phone:$('c_phone').value,seatsTotal:$('c_seats').value,meetingPlace:$('c_meeting').value,departureTime:$('c_depart').value,notes:$('c_notes').value});render();}catch(e){alert(e.message)}}
+async function joinCar(cid){try{S=await api('POST',`/api/cars/${cid}/passengers`,{name:$('p_name_'+cid).value,pickup:$('p_pickup_'+cid).value,phone:$('p_phone_'+cid).value});render();}catch(e){alert(e.message)}}
+async function removePassenger(cid,pid){if(confirm('Remove this passenger?')){S=await api('DELETE',`/api/cars/${cid}/passengers/${pid}`);render();}}
+async function removeCar(cid){if(confirm('Remove this car and its passengers?')){S=await api('DELETE',`/api/cars/${cid}`);render();}}
+async function editMeeting(cid){const car=S.cars.find(c=>c.id===cid);const place=prompt('Meeting place',car.meetingPlace);if(place===null)return;const time=prompt('Departure time (HH:MM)',car.departureTime||'');if(time===null)return;S=await api('PATCH',`/api/cars/${cid}`,{meetingPlace:place,departureTime:time});render();}
+refresh(); setInterval(refresh,4000);
+</script></body></html>
