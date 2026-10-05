@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: hiking-carpool
+    runtime: node
+    plan: starter
+    buildCommand: ""
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: hiking-carpool-data
+      mountPath: /var/data
+      sizeGB: 1
