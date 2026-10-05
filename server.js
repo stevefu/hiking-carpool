@@ -119,4 +119,5 @@ const server = http.createServer(async (req, res) => {
     return send(res, 400, { error: e.message || 'Bad request' });
   }
 });
-server.listen(PORT, () => console.log(`Hiking Carpool listening on ${PORT}, data in ${DATA_DIR}`));
+console.log(`Starting Hiking Carpool, PORT = ${PORT}, DATA_DIR = ${DATA_DIR}`);
+server.listen(PORT, '0.0.0.0', () => console.log(`Hiking Carpool listening on ${PORT}, data in ${DATA_DIR}`));
