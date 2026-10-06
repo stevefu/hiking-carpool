@@ -26,6 +26,7 @@ function newTrip(t) {
     id: id(),
     title: t.title || '', trailhead: t.trailhead || '', date: t.date || '',
     startTime: t.startTime || '', meetingPoint: t.meetingPoint || '', notes: t.notes || '',
+    maxParticipants: t.maxParticipants ?? null, // organizer-set cap; null = no cap
     organizerName: t.organizerName || '', organizerId: t.organizerId || null,
     organizerPinHash: t.organizerPinHash || null,
     hikers: t.hikers || [], // {id, name, mode: 'undecided'|'driver'|'passenger'}
@@ -192,6 +193,15 @@ const server = http.createServer(async (req, res) => {
       // owns every other detail.
       for (const k of ['trailhead', 'date', 'startTime', 'meetingPoint', 'notes'])
         if (b[k] !== undefined) trip[k] = clean(b[k], k === 'notes' ? 500 : 200);
+      if (b.maxParticipants !== undefined) {
+        if (b.maxParticipants === null || b.maxParticipants === '') trip.maxParticipants = null;
+        else {
+          const n = parseInt(b.maxParticipants, 10);
+          if (!Number.isInteger(n) || n < 1 || n > 500)
+            return send(res, 400, { error: 'Max participants must be a whole number from 1 to 500 (or blank for no cap)' });
+          trip.maxParticipants = n;
+        }
+      }
       save(); return send(res, 200, publicState());
     }
 
@@ -234,14 +244,49 @@ const server = http.createServer(async (req, res) => {
       if (!name) return send(res, 400, { error: 'Hiker name is required' });
       if (trip.hikers.some(h => h.name.toLowerCase() === name.toLowerCase()))
         return send(res, 409, { error: 'That name is already on the roster' });
+      if (trip.maxParticipants && trip.hikers.length >= trip.maxParticipants)
+        return send(res, 409, { error: `This trip is full (max ${trip.maxParticipants} participants)` });
       trip.hikers.push({ id: id(), name, mode: 'undecided' });
       save(); return send(res, 201, publicState());
     }
+    const joinMatch = p.match(/^\/api\/trips\/([a-f0-9]+)\/join$/);
+    if (joinMatch && req.method === 'POST') { // hiker adds themself to the roster
+      const trip = getTrip(joinMatch[1]);
+      if (!trip) return send(res, 404, { error: 'Trip not found' });
+      const b = await readBody(req);
+      const name = clean(b.name, 80);
+      if (!name) return send(res, 400, { error: 'Your name is required' });
+      if (trip.hikers.some(h => h.name.toLowerCase() === name.toLowerCase()))
+        return send(res, 409, { error: 'That name is already on the roster — pick it from the list instead' });
+      if (trip.maxParticipants && trip.hikers.length >= trip.maxParticipants)
+        return send(res, 409, { error: `This trip is full (max ${trip.maxParticipants} participants)` });
+      const h = { id: id(), name, mode: 'undecided' };
+      trip.hikers.push(h);
+      save(); return send(res, 201, { ...publicState(), joinedId: h.id });
+    }
     const hikerMatch = p.match(/^\/api\/trips\/([a-f0-9]+)\/hikers\/([a-f0-9]+)$/);
+    if (hikerMatch && req.method === 'PATCH') { // rename a hiker ("edit my info")
+      const trip = getTrip(hikerMatch[1]);
+      if (!trip) return send(res, 404, { error: 'Trip not found' });
+      const h = getHiker(trip, hikerMatch[2]);
+      if (!h) return send(res, 404, { error: 'Hiker not found' });
+      if (!isOrganizer(req, trip) && actorId(req) !== h.id)
+        return send(res, 401, { error: 'You can only edit your own info' });
+      const b = await readBody(req);
+      const name = clean(b.name, 80);
+      if (!name) return send(res, 400, { error: 'Name is required' });
+      if (trip.hikers.some(x => x.id !== h.id && x.name.toLowerCase() === name.toLowerCase()))
+        return send(res, 409, { error: 'That name is already on the roster' });
+      const wasOrganizer = trip.organizerId === h.id;
+      h.name = name;
+      if (wasOrganizer) trip.organizerName = name; // keep the "organized by" label in sync
+      save(); return send(res, 200, publicState());
+    }
     if (hikerMatch && req.method === 'DELETE') {
       const trip = getTrip(hikerMatch[1]);
       if (!trip) return send(res, 404, { error: 'Trip not found' });
-      if (!isOrganizer(req, trip)) return send(res, 401, { error: 'Organizer or Admin PIN required' });
+      if (!isOrganizer(req, trip) && actorId(req) !== hikerMatch[2])
+        return send(res, 401, { error: 'Organizer or Admin PIN required' });
       const h = getHiker(trip, hikerMatch[2]);
       if (!h) return send(res, 404, { error: 'Hiker not found' });
       const car = carOfDriver(trip, h.id);
