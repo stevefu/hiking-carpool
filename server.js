@@ -132,6 +132,10 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   try {
     if (p === '/health') return send(res, 200, { ok: true });
+    // Before any write, re-read the data file: during a rolling redeploy two
+    // instances can briefly serve at once, and a stale in-memory copy must
+    // never overwrite newer data (e.g. a PIN set seconds ago) on its next save.
+    if (req.method !== 'GET') { try { state = load(); } catch { /* keep memory */ } }
     if (p === '/api/state' && req.method === 'GET') return send(res, 200, publicState());
 
     // ----- Admin -----
@@ -162,6 +166,8 @@ const server = http.createServer(async (req, res) => {
       if (organizerPin.length < 4) return send(res, 400, { error: 'Organizer PIN must be at least 4 characters' });
       const trip = newTrip({
         title, trailhead: clean(b.trailhead, 200), date: clean(b.date, 20),
+        startTime: clean(b.startTime, 20), meetingPoint: clean(b.meetingPoint, 200),
+        notes: clean(b.notes, 500),
         organizerName, organizerPinHash: hashPin(organizerPin)
       });
       const org = { id: id(), name: organizerName, mode: 'undecided' };
@@ -182,7 +188,9 @@ const server = http.createServer(async (req, res) => {
       if (!trip) return send(res, 404, { error: 'Trip not found' });
       if (!isOrganizer(req, trip)) return send(res, 401, { error: 'Organizer or Admin PIN required' });
       const b = await readBody(req);
-      for (const k of ['title', 'trailhead', 'date', 'startTime', 'meetingPoint', 'notes'])
+      // The trip's name belongs to the admin who created it; the organizer
+      // owns every other detail.
+      for (const k of ['trailhead', 'date', 'startTime', 'meetingPoint', 'notes'])
         if (b[k] !== undefined) trip[k] = clean(b[k], k === 'notes' ? 500 : 200);
       save(); return send(res, 200, publicState());
     }
@@ -333,7 +341,7 @@ const server = http.createServer(async (req, res) => {
       save(); return send(res, 200, publicState());
     }
 
-    if (p === '/' || p === '/index.html') {
+    if (p === '/' || p === '/index.html' || p === '/admin' || p === '/organizer') {
       return send(res, 200, fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8'), 'text/html');
     }
     return send(res, 404, { error: 'Not found' });
