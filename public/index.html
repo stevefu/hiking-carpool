@@ -40,6 +40,7 @@ let ADMIN_PINS={}; // tripId -> organizer PIN, fetched only when admin-unlocked
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>{const v=Number.isFinite(n)?n:40;return '$'+(Number.isInteger(v)?v:v.toFixed(2));};
+const fmtTime=s=>{if(!s)return '';const m=String(s).match(/^(\d{1,2}):(\d{2})/);if(!m)return s;let hh=parseInt(m[1],10);const ap=hh>=12?'PM':'AM';hh=hh%12||12;return hh+':'+m[2]+' '+ap;};
 const adminPin=()=>sessionStorage.getItem('hc2_admin')||'';
 const orgPin=tid=>sessionStorage.getItem('hc2_org_'+tid)||'';
 const myId=tid=>localStorage.getItem('hc2_me_'+tid)||'';
@@ -104,7 +105,7 @@ function renderTrip(t){
  h+=`<section class="card"><h2>Hike Info</h2>
   <p style="font-size:18px;margin:4px 0"><b>${esc(t.title)||'Untitled trip'}</b></p>
   <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')}</p>
-  <p><b>Hike meeting point:</b> ${esc(t.meetingPoint)||'—'}${t.startTime?(' · <b>Start:</b> '+esc(t.startTime)):''}</p>
+  <p><b>Hike meeting point:</b> ${esc(t.meetingPoint)||'—'}${t.startTime?(' · <b>Start:</b> '+esc(fmtTime(t.startTime))):''}</p>
   <p><b>Cost per passenger:</b> ${money(t.costPerPassenger)} <span class="small">(paid to your driver)</span></p>
   <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b></p>
   ${t.notes?`<p class="small">${esc(t.notes)}</p>`:''}
@@ -188,7 +189,7 @@ function myCarBlock(t,mine){
  if(myCar){
   return `<section class="card"><h2>My Car info</h2>
    <p>🚗 <b>${myCar.passengerIds.length}/${myCar.seatsTotal} seats taken</b> · ${Math.max(0,myCar.seatsTotal-myCar.passengerIds.length)} free<br>
-   <b>Meet:</b> ${esc(myCar.meetingPlace)||'—'}${myCar.departureTime?(' at '+esc(myCar.departureTime)):''}</p>
+   <b>Meet:</b> ${esc(myCar.meetingPlace)||'—'}${myCar.departureTime?(' at '+esc(fmtTime(myCar.departureTime))):''}</p>
    <p class="small">Each passenger pays you <b>${money(t.costPerPassenger)}</b>.</p>
    ${myCar.notes?`<p class="small">${esc(myCar.notes)}</p>`:''}
    <ul>${myCar.passengerIds.map(pid=>{const x=hiker(t,pid);return `<li><b>${esc(x?x.name:'?')}</b> <button class="small secondary" onclick="assign('${t.id}','${pid}',null)">Remove</button></li>`;}).join('')||'<li class="small">No passengers yet.</li>'}</ul>
@@ -200,7 +201,7 @@ function myCarBlock(t,mine){
   const d=hiker(t,riding.driverId);
   return `<section class="card"><h2>My ride info</h2>
    <p>🎒 You're riding with <b>${esc(d?d.name:'')}</b>.<br>
-   <b>Meet:</b> ${esc(riding.meetingPlace)||'—'}${riding.departureTime?(' at '+esc(riding.departureTime)):''}</p>
+   <b>Meet:</b> ${esc(riding.meetingPlace)||'—'}${riding.departureTime?(' at '+esc(fmtTime(riding.departureTime))):''}</p>
    <p>You pay your driver <b>${money(t.costPerPassenger)}</b>.</p>
    <button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave that car</button></section>`;
  }
@@ -236,7 +237,7 @@ function carCard(t,c,mine){
  let h=`<section class="card"><h2>🚗 ${esc(d?d.name:'?')}'s car</h2>
   <p><span class="seats ${left?'open':'full'}">${left?left+' seat'+(left>1?'s':'')+' left':'Full'}</span> · ${c.passengerIds.length}/${c.seatsTotal} passengers</p>
   <p class="small">Each passenger pays the driver <b>${money(t.costPerPassenger)}</b></p>
-  <p><b>Meet:</b> ${esc(c.meetingPlace)||'—'}${c.departureTime?(' at <b>'+esc(c.departureTime)+'</b>'):''}</p>
+  <p><b>Meet:</b> ${esc(c.meetingPlace)||'—'}${c.departureTime?(' at <b>'+esc(fmtTime(c.departureTime))+'</b>'):''}</p>
   ${c.notes?`<p class="small">${esc(c.notes)}</p>`:''}
   <ul>${c.passengerIds.map(pid=>{const x=hiker(t,pid);const can=iDrive||(mine&&mine.id===pid);
    return `<li><b>${esc(x?x.name:'?')}</b>${can?` <button class="small secondary" onclick="assign('${t.id}','${pid}',null)">Remove</button>`:''}</li>`;}).join('')||'<li class="small">No passengers yet.</li>'}</ul>`;
