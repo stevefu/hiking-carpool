@@ -9,8 +9,9 @@
  .card{background:#fff;border-radius:12px;padding:14px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
  label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
  input,textarea,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d2c9;border-radius:8px;font-size:16px;background:#fff}
- button{background:#2e5d34;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin-top:10px}
- button.secondary{background:#e7ede7;color:#1c2a1e} button.danger{background:#a33} button.small{padding:6px 10px;font-size:13px;margin-top:0}
+ button{background:#2e5d34;color:#fff;-webkit-appearance:none;appearance:none;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin-top:10px}
+ button.secondary{background:#e7ede7;color:#1c2a1e} button.danger{background:#a33;color:#fff} button.small{padding:6px 10px;font-size:13px;margin-top:0}
+ button:not(.secondary){color:#fff}
  .seats{font-weight:700} .full{color:#a33} .open{color:#2e5d34}
  li{margin:6px 0} .small{font-size:13px;color:#555} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
  .tag{display:inline-block;background:#e7ede7;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:600;margin-left:6px}
@@ -40,9 +41,9 @@ const money=n=>{const v=Number.isFinite(n)?n:40;return '$'+(Number.isInteger(v)?
 const adminPin=()=>sessionStorage.getItem('hc2_admin')||'';
 const orgPin=tid=>sessionStorage.getItem('hc2_org_'+tid)||'';
 const myId=tid=>localStorage.getItem('hc2_me_'+tid)||'';
-const orgSel=()=>sessionStorage.getItem('hc3_orgsel')||'';
 const hashTripId=()=>{const m=location.hash.match(/^#trip\/([a-f0-9]+)/);return m?m[1]:null;};
-const curTid=()=> MODE==='organizer' ? (orgSel()||null) : hashTripId();
+// Everyone works inside ONE specific trip, reached by that trip's own link.
+const curTid=()=>hashTripId();
 const trip=()=>S.trips.find(t=>t.id===curTid())||null;
 const hiker=(t,id)=>t.hikers.find(h=>h.id===id);
 const carOfDriver=(t,hid)=>t.cars.find(c=>c.driverId===hid);
@@ -65,7 +66,7 @@ function render(){
  const t=trip();
  $('summary').textContent = MODE==='admin' ? 'Name trips and hand them to organizers'
   : MODE==='organizer' ? 'Your trip\u2019s details and roster'
-  : t ? ([t.title,t.date,t.trailhead].filter(Boolean).join(' · ')||'Trip') : 'Trips, cars and meeting points — one board per hike';
+  : t ? ([t.title,t.date,t.trailhead].filter(Boolean).join(' · ')||'Trip') : 'One trip per link — open the link for your trip';
  if(MODE==='admin')return renderAdmin();
  if(MODE==='organizer')return renderOrganizer();
  return t?renderTrip(t):renderHome();
@@ -86,19 +87,13 @@ function tripStats(t){
 
 // ================= HIKER PAGE =================
 function renderHome(){
- let h='';
- if(!S.trips.length)h+='<section class="card">No trips yet. An admin creates trips on the admin page.</section>';
- h+=S.trips.map(t=>`<section class="card trip" onclick="location.hash='#trip/${t.id}'">
-   <h2>${esc(t.title)||'Untitled trip'}</h2>
-   <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')||'Details to come'}</p>
-   <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b>${t.startTime?(' · Hike starts '+esc(t.startTime)):''}</p>
-   <p class="small">${tripStats(t)}</p></section>`).join('');
- h+='<p class="small">Pick a trip, then pick your name on it — no accounts needed. Share this link only with your hiking group.</p>';
- $('app').innerHTML=h;
+ $('app').innerHTML=`<section class="card"><h2>Open your trip's link</h2>
+  <p>This page works on <b>one specific trip</b> at a time, and each trip has its own link — there is no list of trips here.</p>
+  <p class="small">Your organizer or admin will send you the link for your trip (it ends in <b>#trip/…</b>). Tap that link and you'll land directly on your trip. Bookmark it for next time.</p></section>`;
 }
 function renderTrip(t){
  const mine=me(t);
- let h=`<p><a href="#" onclick="location.hash='';return false;">← All trips</a></p>`;
+ let h='';
  // Block 1: Hike Info
  h+=`<section class="card"><h2>Hike Info</h2>
   <p style="font-size:18px;margin:4px 0"><b>${esc(t.title)||'Untitled trip'}</b></p>
@@ -269,7 +264,7 @@ async function assign(tid,pid,cid){
 
 // ================= ADMIN PAGE =================
 function renderAdmin(){
- let h='<p><a href="/">← Hiker view</a> · <a href="/organizer">Organizer page</a></p>';
+ let h='';
  if(!S.hasAdminPin){
   h+=`<section class="card"><h2>Set up admin access</h2>
    <p class="small">No Admin PIN exists yet. Whoever sets it up first becomes the admin — pick a PIN and share it only with co-admins.</p>
@@ -290,6 +285,8 @@ function renderAdmin(){
   h+=S.trips.map(t=>`<section class="card"><h2>${esc(t.title)||'Untitled trip'}</h2>
    <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')}</p>
    <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b> · ${tripStats(t)}</p>
+   <p class="small">Hiker link — share with the group:<br><a href="/#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/#trip/${t.id}</a></p>
+   <p class="small">Organizer link — share only with this trip's organizer:<br><a href="/organizer#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/organizer#trip/${t.id}</a></p>
    <div class="row"><button class="small secondary" onclick="assignOrganizer('${t.id}')">Change organizer</button>
    <button class="small danger" onclick="deleteTrip('${t.id}')">Delete trip</button></div></section>`).join('')||'<section class="card">No trips yet.</section>';
   h+=`<section class="card"><button class="secondary" onclick="lockAdmin()">Lock admin on this device</button></section>`;
@@ -305,7 +302,7 @@ async function setupAdmin(){
 async function unlockAdmin(){const pin=$('a_pin').value;try{await api('POST','/api/admin/verify',{pin},'');sessionStorage.setItem('hc2_admin',pin);render();}catch(e){alert(e.message)}}
 function lockAdmin(){sessionStorage.removeItem('hc2_admin');render();}
 async function createTrip(){
- try{S=await api('POST','/api/trips',{title:$('t_title').value,organizerName:$('t_org').value,organizerPin:$('t_orgpin').value},'');render();alert('Trip created. Give the organizer the organizer page link and their PIN — they fill in the hike details and roster.');}catch(e){alert(e.message)}
+ try{S=await api('POST','/api/trips',{title:$('t_title').value,organizerName:$('t_org').value,organizerPin:$('t_orgpin').value},'');render();alert('Trip created. Its hiker and organizer links are on the trip\u2019s card below — send the organizer their link plus the Organizer PIN.');}catch(e){alert(e.message)}
 }
 async function deleteTrip(tid){if(confirm('Delete this whole trip? This cannot be undone.')){try{S=await api('DELETE',`/api/trips/${tid}`,null,'');render();}catch(e){alert(e.message)}}}
 async function assignOrganizer(tid){
@@ -316,21 +313,19 @@ async function assignOrganizer(tid){
 
 // ================= ORGANIZER PAGE =================
 function renderOrganizer(){
- let h='<p><a href="/">← Hiker view</a></p>';
+ let h='';
  const t=trip();
  if(!t){
-  h+='<section class="card"><h2>Pick your trip</h2>';
-  h+=S.trips.map(x=>`<section class="card trip" onclick="pickOrgTrip('${x.id}')"><h2>${esc(x.title)||'Untitled trip'}</h2>
-   <p class="small">${[x.date,x.trailhead].filter(Boolean).map(esc).join(' · ')} · Organized by <b>${esc(x.organizerName)||'—'}</b></p></section>`).join('')||'<p class="small">No trips yet — an admin creates trips first.</p>';
-  h+='</section>';
-  $('app').innerHTML=h;return;
+  $('app').innerHTML=`<section class="card"><h2>Open your trip's organizer link</h2>
+   <p>This page works on <b>one specific trip</b> at a time, and each trip has its own organizer link — there is no list of trips here.</p>
+   <p class="small">The admin will send you the organizer link for your trip (it's the organizer page address ending in <b>#trip/…</b>). Tap it and you'll land directly on your trip. Bookmark it for next time.</p></section>`;
+  return;
  }
  if(!orgPin(t.id)&&!adminPin()){
   h+=`<section class="card"><h2>${esc(t.title)||'Trip'}</h2>
-   <p class="small">Enter this trip's Organizer PIN to manage its roster. (An Admin PIN also works.)</p>
+   <p class="small">Enter this trip's Organizer PIN to manage its details and roster. (An Admin PIN also works.)</p>
    <label>Organizer PIN <input id="o_pin" type="password"></label>
-   <button onclick="unlockOrg('${t.id}')">Unlock roster</button>
-   <div><button class="secondary" onclick="pickOrgTrip('')">← Pick a different trip</button></div></section>`;
+   <button onclick="unlockOrg('${t.id}')">Unlock</button></section>`;
   $('app').innerHTML=h;return;
  }
  h+=`<section class="card"><h2>${esc(t.title)||'Trip'} — details</h2>
@@ -350,11 +345,9 @@ function renderOrganizer(){
   <button onclick="addHiker('${t.id}')">Add hiker</button></section>
   <section class="card"><h2>Hikers (${t.hikers.length}${t.maxParticipants?(' of max '+t.maxParticipants):''})</h2><ul>
   ${t.hikers.map(x=>`<li><b>${esc(x.name)}</b>${statusTag(t,x)} <button class="small danger" onclick="removeHiker('${t.id}','${x.id}')">Remove</button></li>`).join('')||'<li class="small">No hikers yet.</li>'}
-  </ul><p class="small">Removing a driver also removes their car; their passengers become unassigned, never deleted.</p>
-  <button class="secondary" onclick="pickOrgTrip('')">← Pick a different trip</button></section>`;
+  </ul><p class="small">Removing a driver also removes their car; their passengers become unassigned, never deleted.</p></section>`;
  $('app').innerHTML=h;
 }
-function pickOrgTrip(tid){if(tid)sessionStorage.setItem('hc3_orgsel',tid);else sessionStorage.removeItem('hc3_orgsel');render();}
 async function unlockOrg(tid){
  const pin=$('o_pin').value;
  try{await api('PUT',`/api/trips/${tid}/organizer`,{pin},tid);sessionStorage.setItem('hc2_org_'+tid,pin);render();alert('Roster unlocked on this device.');}catch(e){alert(e.message)}
