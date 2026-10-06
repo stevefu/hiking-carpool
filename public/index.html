@@ -133,38 +133,34 @@ function signupTable(t,mine){
  }).join('');
  return `<table><tr><th>Hiker</th><th>Role</th><th>Car</th></tr>${rows}</table>`;
 }
-let switchOpen=false;
 function currentUserBlock(t,mine){
  const full=t.maxParticipants&&t.hikers.length>=t.maxParticipants;
  let h=`<section class="card"><h2>Current user</h2>`;
+ // 1) Who you are — with Edit info / Remove myself right next to the name.
  if(mine){
   h+=`<p class="small" style="margin:0">You are using this page as</p>
-   <div class="you-name">${esc(mine.name)}</div>`;
+   <div class="row" style="align-items:center">
+    <div class="you-name">${esc(mine.name)}</div>
+    <button class="secondary" style="margin-top:0" onclick="editMyInfo('${t.id}')">Edit info</button>
+    <button class="danger" style="margin-top:0" onclick="removeMyself('${t.id}')">Remove myself</button>
+   </div>`;
  } else {
   h+=`<p>You haven't picked who you are on this device yet.</p>`;
  }
- h+=`<div class="row">
-   <button class="big" onclick="toggleSwitch()">Switch user</button>
-   <button class="big secondary" onclick="addMyself('${t.id}')">Add Myself</button>
-  </div>
-  <div id="switchPanel" ${switchOpen?'':'hidden'}>
-   <label>Switch to another user
-   <select class="bigswitch" onchange="setMe('${t.id}',this.value)">
-   <option value="">— pick who you are —</option>
+ // 2) Driver/passenger role selection.
+ if(mine)h+=roleArea(t,mine);
+ // 3) Switch-user pull-down + Add New Hiker.
+ h+=`<div class="row" style="align-items:stretch;margin-top:12px">
+   <select class="bigswitch" style="flex:2" onchange="setMe('${t.id}',this.value)" aria-label="Switch user">
+   <option value="">— switch user: pick a name —</option>
    ${t.hikers.map(x=>`<option value="${x.id}" ${mine&&mine.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
-   </select></label>
+   </select>
+   <button class="big secondary" onclick="addMyself('${t.id}')">Add New Hiker</button>
   </div>`;
  if(!mine&&full)h+=`<p>🚫 This trip is full (max ${t.maxParticipants} participants), so nobody new can be added right now.</p>`;
- if(mine){
-  h+=`<div class="row">
-    <button class="secondary" onclick="editMyInfo('${t.id}')">Edit my info</button>
-    <button class="danger" onclick="removeMyself('${t.id}')">Remove myself</button>
-   </div>
-   ${roleArea(t,mine)}`;
- }
+ if(!mine)h+=`<p class="small">Already on the list? Pick your name in the pull-down. New here? Tap <b>Add New Hiker</b>.</p>`;
  return h+'</section>';
 }
-function toggleSwitch(){switchOpen=!switchOpen;render();}
 async function addMyself(tid){
  const t=trip();
  if(t.maxParticipants&&t.hikers.length>=t.maxParticipants)return alert(`This trip is full (max ${t.maxParticipants} participants) — nobody new can be added right now.`);
@@ -172,7 +168,7 @@ async function addMyself(tid){
  if(name===null||!name.trim())return;
  try{const r=await api('POST',`/api/trips/${tid}/join`,{name:name.trim()},tid);S=r;
   if(r.joinedId)localStorage.setItem('hc2_me_'+tid,r.joinedId);
-  switchOpen=false;render();alert('Added — you are now using this page as '+name.trim()+'. Next, choose whether you\'re a driver or a passenger.');}catch(e){alert(e.message)}
+  render();alert('Added — you are now using this page as '+name.trim()+'. Next, choose whether you\'re a driver or a passenger.');}catch(e){alert(e.message)}
 }
 function roleArea(t,mine){
  if(mine.mode==='driver')
