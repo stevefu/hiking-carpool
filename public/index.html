@@ -35,6 +35,7 @@
 const MODE = location.pathname.startsWith('/admin') ? 'admin'
            : location.pathname.startsWith('/organizer') ? 'organizer' : 'hiker';
 let S={hasAdminPin:false,trips:[]};
+let ADMIN_PINS={}; // tripId -> organizer PIN, fetched only when admin-unlocked
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>{const v=Number.isFinite(n)?n:40;return '$'+(Number.isInteger(v)?v:v.toFixed(2));};
@@ -60,7 +61,11 @@ async function api(method,path,body,tid){
  const j=await r.json();if(!r.ok)throw new Error(j.error||'Something went wrong');return j;
 }
 function busy(){const a=document.activeElement;return a&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName);}
-async function refresh(){try{const n=await api('GET','/api/state',null,'');if(JSON.stringify(n)===JSON.stringify(S))return;if(busy())return;S=n;render();}catch(e){}}
+let lastSig='';
+async function refresh(){try{const n=await api('GET','/api/state',null,'');
+ if(MODE==='admin'&&adminPin()){try{const ap=await api('GET','/api/admin/trips',null,'');const m={};(ap.trips||[]).forEach(x=>m[x.id]=x.organizerPin);ADMIN_PINS=m;}catch(e){}}
+ const sig=JSON.stringify(n)+'|'+JSON.stringify(ADMIN_PINS);
+ if(sig===lastSig)return;if(busy())return;S=n;lastSig=sig;render();}catch(e){}}
 function render(){
  $('hdr').textContent = MODE==='admin' ? '🥾 Hiking Carpool — Admin' : MODE==='organizer' ? '🥾 Hiking Carpool — Organizer' : '🥾 Hiking Carpool';
  const t=trip();
@@ -286,7 +291,7 @@ function renderAdmin(){
    <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')}</p>
    <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b> · ${tripStats(t)}</p>
    <p class="small">Hiker link — share with the group:<br><a href="/#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/#trip/${t.id}</a></p>
-   <p class="small">Organizer link — share only with this trip's organizer:<br><a href="/organizer#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/organizer#trip/${t.id}</a></p>
+   <p class="small">Organizer link — share only with this trip's organizer:<br><a href="/organizer#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/organizer#trip/${t.id}</a><br>Organizer PIN: <b>${ADMIN_PINS[t.id]?esc(ADMIN_PINS[t.id]):'not recorded for this trip — if it\'s needed here, use “Change organizer” to set a new one'}</b></p>
    <div class="row"><button class="small secondary" onclick="assignOrganizer('${t.id}')">Change organizer</button>
    <button class="small danger" onclick="deleteTrip('${t.id}')">Delete trip</button></div></section>`).join('')||'<section class="card">No trips yet.</section>';
   h+=`<section class="card"><button class="secondary" onclick="lockAdmin()">Lock admin on this device</button></section>`;
@@ -300,7 +305,7 @@ async function setupAdmin(){
  try{await api('POST','/api/admin/setup',{pin:p1},'');sessionStorage.setItem('hc2_admin',p1);S=await api('GET','/api/state',null,'');render();alert('Admin PIN set. You are now unlocked as Admin.');}catch(e){alert(e.message)}
 }
 async function unlockAdmin(){const pin=$('a_pin').value;try{await api('POST','/api/admin/verify',{pin},'');sessionStorage.setItem('hc2_admin',pin);render();}catch(e){alert(e.message)}}
-function lockAdmin(){sessionStorage.removeItem('hc2_admin');render();}
+function lockAdmin(){sessionStorage.removeItem('hc2_admin');ADMIN_PINS={};lastSig='';render();}
 async function createTrip(){
  try{S=await api('POST','/api/trips',{title:$('t_title').value,organizerName:$('t_org').value,organizerPin:$('t_orgpin').value},'');render();alert('Trip created. Its hiker and organizer links are on the trip\u2019s card below — send the organizer their link plus the Organizer PIN.');}catch(e){alert(e.message)}
 }
@@ -328,7 +333,10 @@ function renderOrganizer(){
    <button onclick="unlockOrg('${t.id}')">Unlock</button></section>`;
   $('app').innerHTML=h;return;
  }
- h+=`<section class="card"><h2>${esc(t.title)||'Trip'} — details</h2>
+ h+=`<section class="card"><h2>Share with your hikers</h2>
+  <p class="small">Send this link to everyone on the trip — it's the hiker page for <b>this trip only</b>:<br>
+  <a href="/#trip/${t.id}" target="_blank" rel="noopener">${location.origin}/#trip/${t.id}</a></p></section>
+  <section class="card"><h2>${esc(t.title)||'Trip'} — details</h2>
   <label>Trailhead <input id="d_trailhead" value="${esc(t.trailhead)}" placeholder="Trailhead name / address"></label>
   <div class="row"><label style="flex:1">Date <input id="d_date" type="date" value="${esc(t.date)}"></label>
   <label style="flex:1">Hike start time <input id="d_start" type="time" value="${esc(t.startTime)}"></label></div>
