@@ -30,6 +30,7 @@ function newTrip(t) {
     costPerPassenger: Number.isFinite(t.costPerPassenger) ? t.costPerPassenger : 40, // what each passenger pays the driver
     organizerName: t.organizerName || '', organizerId: t.organizerId || null,
     organizerPinHash: t.organizerPinHash || null,
+    organizerPinPlain: t.organizerPinPlain || null, // admin-display copy; stripped from public state
     hikers: t.hikers || [], // {id, name, mode: 'undecided'|'driver'|'passenger'}
     cars: t.cars || []      // {id, driverId, seatsTotal, meetingPlace, departureTime, notes, passengerIds: []}
   };
@@ -90,8 +91,10 @@ function publicState() {
   return {
     hasAdminPin: !!state.adminPinHash,
     trips: state.trips.map(t => {
-      const { organizerPinHash, ...rest } = t;
-      // Trips saved before costPerPassenger existed read as the $40 default.
+      const { organizerPinHash, organizerPinPlain, ...rest } = t;
+      // organizerPinPlain must never reach the public state — it is served
+      // only by the admin-gated endpoint below. Trips saved before
+      // costPerPassenger existed read as the $40 default.
       return { ...rest, costPerPassenger: Number.isFinite(t.costPerPassenger) ? t.costPerPassenger : 40, hasOrganizerPin: !!organizerPinHash };
     })
   };
@@ -156,6 +159,14 @@ const server = http.createServer(async (req, res) => {
       return hashPin(b.pin) === state.adminPinHash
         ? send(res, 200, { ok: true }) : send(res, 401, { error: 'Wrong PIN' });
     }
+    if (p === '/api/admin/trips' && req.method === 'GET') {
+      // Admin-only: each trip's Organizer PIN in plain text, so the admin
+      // page can print it next to the organizer link. Never in public state.
+      if (!isAdmin(req)) return send(res, 401, { error: 'Admin PIN required' });
+      return send(res, 200, {
+        trips: state.trips.map(t => ({ id: t.id, organizerPin: t.organizerPinPlain ?? null }))
+      });
+    }
 
     // ----- Trips -----
     if (p === '/api/trips' && req.method === 'POST') {
@@ -171,7 +182,7 @@ const server = http.createServer(async (req, res) => {
         title, trailhead: clean(b.trailhead, 200), date: clean(b.date, 20),
         startTime: clean(b.startTime, 20), meetingPoint: clean(b.meetingPoint, 200),
         notes: clean(b.notes, 500),
-        organizerName, organizerPinHash: hashPin(organizerPin)
+        organizerName, organizerPinHash: hashPin(organizerPin), organizerPinPlain: organizerPin
       });
       const org = { id: id(), name: organizerName, mode: 'undecided' };
       trip.hikers.push(org); trip.organizerId = org.id;
@@ -228,6 +239,7 @@ const server = http.createServer(async (req, res) => {
         const pin = clean(b.organizerPin, 40);
         if (pin.length < 4) return send(res, 400, { error: 'Organizer PIN must be at least 4 characters' });
         trip.organizerPinHash = hashPin(pin);
+        trip.organizerPinPlain = pin; // recorded so the admin page can print it back to the admin
       }
       trip.organizerName = name;
       let h = trip.hikers.find(x => x.name.toLowerCase() === name.toLowerCase());
