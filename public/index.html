@@ -22,6 +22,7 @@
  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #e3e9e3;vertical-align:top}
  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#555}
  .you-name{font-size:22px;font-weight:800}
+ .hl{background:#ffec99;border-radius:8px;padding:1px 10px;white-space:nowrap}
  select.bigswitch{font-size:18px;font-weight:700;padding:14px;border:2px solid #2e5d34;border-radius:10px;background:#eef4ee}
  button.big{flex:1;padding:16px 10px;font-size:17px;font-weight:700;margin-top:0}
 </style></head><body>
@@ -135,12 +136,10 @@ function signupTable(t,mine){
 }
 function currentUserBlock(t,mine){
  const full=t.maxParticipants&&t.hikers.length>=t.maxParticipants;
- let h=`<section class="card"><h2>Current user</h2>`;
- // 1) Who you are — with Edit info / Remove myself right next to the name.
+ let h=`<section class="card"><h2>Current User${mine?(': <span class="hl">'+esc(mine.name)+'</span>'):''}</h2>`;
+ // 1) Edit info / Remove myself for the current user, right under their name in the title.
  if(mine){
-  h+=`<p class="small" style="margin:0">You are using this page as</p>
-   <div class="row" style="align-items:center">
-    <div class="you-name">${esc(mine.name)}</div>
+  h+=`<div class="row" style="align-items:center">
     <button class="secondary" style="margin-top:0" onclick="editMyInfo('${t.id}')">Edit info</button>
     <button class="danger" style="margin-top:0" onclick="removeMyself('${t.id}')">Remove myself</button>
    </div>`;
