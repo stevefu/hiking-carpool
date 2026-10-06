@@ -136,7 +136,12 @@ function signupTable(t,mine){
 }
 function currentUserBlock(t,mine){
  const full=t.maxParticipants&&t.hikers.length>=t.maxParticipants;
- let h=`<section class="card"><h2>Current User${mine?(': <span class="hl">'+esc(mine.name)+'</span>'):''}</h2>`;
+ let h=`<section class="card"><div class="row" style="align-items:center;flex-wrap:nowrap">
+   <h2 style="margin:0;white-space:nowrap">Current User${mine?(': <span class="hl">'+esc(mine.name)+'</span>'):''}</h2>
+   <select class="bigswitch" style="flex:1;min-width:0" onchange="setMe('${t.id}',this.value)" aria-label="Switch user">
+   <option value="">— switch user —</option>
+   ${t.hikers.map(x=>`<option value="${x.id}" ${mine&&mine.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
+   </select></div>`;
  // 1) Edit info / Remove myself for the current user, right under their name in the title.
  if(mine){
   h+=`<div class="row" style="align-items:center">
@@ -148,14 +153,8 @@ function currentUserBlock(t,mine){
  }
  // 2) Driver/passenger role selection.
  if(mine)h+=roleArea(t,mine);
- // 3) Switch-user pull-down + Add New Hiker.
- h+=`<div class="row" style="align-items:stretch;margin-top:12px">
-   <select class="bigswitch" style="flex:2" onchange="setMe('${t.id}',this.value)" aria-label="Switch user">
-   <option value="">— switch user: pick a name —</option>
-   ${t.hikers.map(x=>`<option value="${x.id}" ${mine&&mine.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
-   </select>
-   <button class="big secondary" onclick="addMyself('${t.id}')">Add New Hiker</button>
-  </div>`;
+ // 3) Add New Hiker (the switch-user pull-down lives in the title row, above).
+ h+=`<div style="margin-top:12px"><button class="big secondary" style="width:100%" onclick="addMyself('${t.id}')">Add New Hiker</button></div>`;
  if(!mine&&full)h+=`<p>🚫 This trip is full (max ${t.maxParticipants} participants), so nobody new can be added right now.</p>`;
  if(!mine)h+=`<p class="small">Already on the list? Pick your name in the pull-down. New here? Tap <b>Add New Hiker</b>.</p>`;
  return h+'</section>';
@@ -353,7 +352,7 @@ function renderOrganizer(){
 }
 async function unlockOrg(tid){
  const pin=$('o_pin').value;
- try{await api('PUT',`/api/trips/${tid}/organizer`,{pin},tid);sessionStorage.setItem('hc2_org_'+tid,pin);render();alert('Roster unlocked on this device.');}catch(e){alert(e.message)}
+ try{await api('PUT',`/api/trips/${tid}/organizer`,{pin},tid);sessionStorage.setItem('hc2_org_'+tid,pin);render();alert('Organizer page unlocked on this device.');}catch(e){alert(e.message)}
 }
 async function addHiker(tid){try{S=await api('POST',`/api/trips/${tid}/hikers`,{name:$('r_name').value},tid);render();}catch(e){alert(e.message)}}
 async function saveDetails(tid){
