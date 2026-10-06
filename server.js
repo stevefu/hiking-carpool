@@ -27,6 +27,7 @@ function newTrip(t) {
     title: t.title || '', trailhead: t.trailhead || '', date: t.date || '',
     startTime: t.startTime || '', meetingPoint: t.meetingPoint || '', notes: t.notes || '',
     maxParticipants: t.maxParticipants ?? null, // organizer-set cap; null = no cap
+    costPerPassenger: Number.isFinite(t.costPerPassenger) ? t.costPerPassenger : 40, // what each passenger pays the driver
     organizerName: t.organizerName || '', organizerId: t.organizerId || null,
     organizerPinHash: t.organizerPinHash || null,
     hikers: t.hikers || [], // {id, name, mode: 'undecided'|'driver'|'passenger'}
@@ -90,7 +91,8 @@ function publicState() {
     hasAdminPin: !!state.adminPinHash,
     trips: state.trips.map(t => {
       const { organizerPinHash, ...rest } = t;
-      return { ...rest, hasOrganizerPin: !!organizerPinHash };
+      // Trips saved before costPerPassenger existed read as the $40 default.
+      return { ...rest, costPerPassenger: Number.isFinite(t.costPerPassenger) ? t.costPerPassenger : 40, hasOrganizerPin: !!organizerPinHash };
     })
   };
 }
@@ -200,6 +202,15 @@ const server = http.createServer(async (req, res) => {
           if (!Number.isInteger(n) || n < 1 || n > 500)
             return send(res, 400, { error: 'Max participants must be a whole number from 1 to 500 (or blank for no cap)' });
           trip.maxParticipants = n;
+        }
+      }
+      if (b.costPerPassenger !== undefined) {
+        if (b.costPerPassenger === null || b.costPerPassenger === '') trip.costPerPassenger = 40; // blank = default
+        else {
+          const n = Number(b.costPerPassenger);
+          if (!Number.isFinite(n) || n < 0 || n > 10000)
+            return send(res, 400, { error: 'Cost per passenger must be between $0 and $10,000 (leave blank for the $40 default)' });
+          trip.costPerPassenger = Math.round(n * 100) / 100;
         }
       }
       save(); return send(res, 200, publicState());
