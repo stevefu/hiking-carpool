@@ -115,25 +115,43 @@ function renderTrip(t){
 }
 function myPanel(t,mine){
  const myCar=carOfDriver(t,mine.id), riding=carOfPassenger(t,mine.id);
- let h='';
- if(myCar){
-  h+=`<p>🚗 You're driving. ${myCar.passengerIds.length}/${myCar.seatsTotal} seats taken.<br>
-   <b>Meet:</b> ${esc(myCar.meetingPlace)||'—'}${myCar.departureTime?(' at '+esc(myCar.departureTime)):''}</p>
-   <div class="row"><button class="secondary" onclick="editCar('${t.id}','${myCar.id}')">Update my car</button>
-   <button class="danger" onclick="stopDriving('${t.id}')">Stop driving — I need a ride</button></div>`;
- } else {
-  if(riding){const d=hiker(t,riding.driverId);h+=`<p>🎒 You're riding with <b>${esc(d?d.name:'')}</b>. Meet: ${esc(riding.meetingPlace)||'—'}${riding.departureTime?(' at '+esc(riding.departureTime)):''}</p>
-   <button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave that car</button>`;}
-  else h+=`<p>You're not in a car yet.</p>`;
-  h+=`<h3>I'll drive</h3>
+ // A driver operates a car — until it exists, the only driver operation is adding it.
+ if(mine.mode==='driver'){
+  if(myCar){
+   return `<p>🚗 You're the <b>driver</b>. ${myCar.passengerIds.length}/${myCar.seatsTotal} seats taken.<br>
+    <b>Meet:</b> ${esc(myCar.meetingPlace)||'—'}${myCar.departureTime?(' at '+esc(myCar.departureTime)):''}</p>
+    <div class="row"><button class="secondary" onclick="editCar('${t.id}','${myCar.id}')">Update my car</button>
+    <button class="danger" onclick="removeCar('${t.id}','${myCar.id}')">Remove my car</button>
+    <button class="secondary" onclick="setMode('${t.id}','passenger')">Switch to passenger</button></div>
+    <p class="small">Your passengers are listed on your car below. Switching to passenger removes your car and unassigns them.</p>`;
+  }
+  return `<p>🚗 You're a <b>driver</b> — now add your car:</p>
    <label>Seats available for passengers <input id="c_seats" type="number" min="1" max="12" value="3"></label>
    <label>Meeting place <input id="c_meeting" placeholder="Where passengers meet you"></label>
    <label>Departure time <input id="c_depart" type="time"></label>
    <label>Notes <input id="c_notes" placeholder="e.g. Blue Subaru, room for packs"></label>
    <button onclick="addCar('${t.id}')">Add my car</button>
-   ${mine.mode!=='passenger'?`<div><button class="secondary" onclick="needRide('${t.id}')">I need a ride (I'm a passenger)</button></div>`:''}`;
+   <div><button class="secondary" onclick="setMode('${t.id}','passenger')">Actually, I'm a passenger instead</button></div>`;
  }
- return h;
+ // A passenger only picks a car — no driver controls anywhere.
+ if(mine.mode==='passenger'){
+  let h='';
+  if(riding){const d=hiker(t,riding.driverId);
+   h+=`<p>🎒 You're a <b>passenger</b>, riding with <b>${esc(d?d.name:'')}</b>.<br>Meet: ${esc(riding.meetingPlace)||'—'}${riding.departureTime?(' at '+esc(riding.departureTime)):''}</p>
+    <button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave that car</button>`;
+  } else {
+   h+=`<p>🎒 You're a <b>passenger</b>. Pick any car below with a free seat and tap “Ride in this car”.</p>`;
+  }
+  h+=`<div><button class="secondary" onclick="setMode('${t.id}','driver')">Switch to driver</button></div>`;
+  return h;
+ }
+ // No role chosen yet — force the choice before showing any operations.
+ return `<p><b>One more step:</b> are you driving, or riding as a passenger?</p>
+  <div class="row">
+   <button onclick="setMode('${t.id}','driver')">🚗 I'm a Driver</button>
+   <button onclick="setMode('${t.id}','passenger')">🎒 I'm a Passenger</button>
+  </div>
+  <p class="small">Pick one — you'll only see the controls for that role. You can switch later if your plans change.</p>`;
 }
 function carCard(t,c,mine){
  const d=hiker(t,c.driverId), left=c.seatsTotal-c.passengerIds.length;
@@ -144,7 +162,7 @@ function carCard(t,c,mine){
   ${c.notes?`<p class="small">${esc(c.notes)}</p>`:''}
   <ul>${c.passengerIds.map(pid=>{const x=hiker(t,pid);const can=iDrive||(mine&&mine.id===pid);
    return `<li><b>${esc(x?x.name:'?')}</b>${can?` <button class="small secondary" onclick="assign('${t.id}','${pid}',null)">Remove</button>`:''}</li>`;}).join('')||'<li class="small">No passengers yet.</li>'}</ul>`;
- if(mine&&!iDrive&&!iRide&&left>0)h+=`<button onclick="assign('${t.id}','${mine.id}','${c.id}')">Ride in this car</button>`;
+ if(mine&&mine.mode==='passenger'&&!iRide&&left>0)h+=`<button onclick="assign('${t.id}','${mine.id}','${c.id}')">Ride in this car</button>`;
  if(iRide)h+=`<button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave this car</button>`;
  if(iDrive)h+=`<div class="row"><button class="secondary" onclick="editCar('${t.id}','${c.id}')">Update meeting place/time</button><button class="danger" onclick="removeCar('${t.id}','${c.id}')">Remove car</button></div>`;
  return h+'</section>';
@@ -153,8 +171,12 @@ function setMe(tid,hid){if(hid)localStorage.setItem('hc2_me_'+tid,hid);else loca
 async function addCar(tid){const m=me(trip());if(!m)return alert('Pick your name first');try{S=await api('POST',`/api/trips/${tid}/cars`,{driverId:m.id,seatsTotal:$('c_seats').value,meetingPlace:$('c_meeting').value,departureTime:$('c_depart').value,notes:$('c_notes').value},tid);render();}catch(e){alert(e.message)}}
 async function editCar(tid,cid){const t=trip();const car=t.cars.find(c=>c.id===cid);const seats=prompt('Seats available for passengers',car.seatsTotal);if(seats===null)return;const place=prompt('Meeting place',car.meetingPlace);if(place===null)return;const time=prompt('Departure time (HH:MM)',car.departureTime||'');if(time===null)return;try{S=await api('PATCH',`/api/trips/${tid}/cars/${cid}`,{seatsTotal:seats,meetingPlace:place,departureTime:time},tid);render();}catch(e){alert(e.message)}}
 async function removeCar(tid,cid){if(confirm('Remove this car? Its passengers will become unassigned.')){try{S=await api('DELETE',`/api/trips/${tid}/cars/${cid}`,null,tid);render();}catch(e){alert(e.message)}}}
-async function stopDriving(tid){if(confirm('Give up your car and become a passenger? Your passengers will become unassigned.')){try{S=await api('POST',`/api/trips/${tid}/ride`,{hikerId:myId(tid)},tid);render();}catch(e){alert(e.message)}}}
-async function needRide(tid){try{S=await api('POST',`/api/trips/${tid}/ride`,{hikerId:myId(tid)},tid);render();}catch(e){alert(e.message)}}
+async function setMode(tid,mode){
+ const t=trip();const mine=me(t);
+ if(mode==='passenger'&&mine&&carOfDriver(t,mine.id)&&!confirm('Switch to passenger? Your car will be removed and its passengers unassigned.'))return;
+ if(mode==='driver'&&mine&&carOfPassenger(t,mine.id)&&!confirm('Switch to driver? You will leave the car you are riding in.'))return;
+ try{S=await api('POST',`/api/trips/${tid}/mode`,{hikerId:myId(tid),mode},tid);render();}catch(e){alert(e.message)}
+}
 async function assign(tid,pid,cid){
  const t=trip();const mine=me(t);
  if(cid&&mine&&carOfDriver(t,mine.id)&&mine.id===pid&&!confirm('You are a driver. Joining this car will remove your own car and unassign your passengers. Continue?'))return;
