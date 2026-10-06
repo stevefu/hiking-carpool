@@ -8,71 +8,230 @@
  main{max-width:720px;margin:0 auto;padding:14px}
  .card{background:#fff;border-radius:12px;padding:14px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
  label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
- input,textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d2c9;border-radius:8px;font-size:16px}
+ input,textarea,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d2c9;border-radius:8px;font-size:16px;background:#fff}
  button{background:#2e5d34;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:15px;margin-top:10px}
- button.secondary{background:#e7ede7;color:#1c2a1e} button.danger{background:#a33}
+ button.secondary{background:#e7ede7;color:#1c2a1e} button.danger{background:#a33} button.small{padding:6px 10px;font-size:13px;margin-top:0}
  .seats{font-weight:700} .full{color:#a33} .open{color:#2e5d34}
- li{margin:6px 0} .small{font-size:13px;color:#555} .row{display:flex;gap:8px;flex-wrap:wrap}
+ li{margin:6px 0} .small{font-size:13px;color:#555} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ .tag{display:inline-block;background:#e7ede7;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:600;margin-left:6px}
+ .trip{cursor:pointer} .trip h2{margin:0 0 6px} a{color:#2e5d34}
+ ul{margin:6px 0;padding-left:20px}
 </style></head><body>
-<header><h1>🥾 Hiking Carpool</h1><div id="hikeSummary">Loading…</div></header>
-<main>
- <section class="card"><h2>The hike</h2>
-  <label>Title <input id="h_title" placeholder="e.g. Saturday ridge hike"></label>
-  <label>Trailhead <input id="h_trailhead" placeholder="Trailhead name / address"></label>
-  <div class="row"><label style="flex:1">Date <input id="h_date" type="date"></label>
-  <label style="flex:1">Trailhead start time <input id="h_startTime" type="time"></label></div>
-  <label>Notes <textarea id="h_notes" rows="2" placeholder="Bring water, parking pass, etc."></textarea></label>
-  <button onclick="saveHike()">Save hike</button>
- </section>
-
- <section class="card"><h2>Drivers — add your car</h2>
-  <label>Your name <input id="c_driver" placeholder="Driver name"></label>
-  <label>Phone (optional) <input id="c_phone" type="tel"></label>
-  <label>Seats available for passengers <input id="c_seats" type="number" min="1" max="12" value="3"></label>
-  <label>Meeting place <input id="c_meeting" placeholder="Where passengers meet you"></label>
-  <label>Departure time from meeting place <input id="c_depart" type="time"></label>
-  <label>Notes <input id="c_notes" placeholder="e.g. Blue Subaru, room for packs"></label>
-  <button onclick="addCar()">Add my car</button>
- </section>
-
- <section id="cars"></section>
- <p class="small">This page refreshes itself every few seconds. Everyone with this link sees the same board and can edit it — share it only with your hiking group.</p>
-</main>
+<header><h1>🥾 Hiking Carpool</h1><div id="summary">Loading…</div></header>
+<main id="app">Loading…</main>
 <script>
-let S={hike:{},cars:[]};
+let S={hasAdminPin:false,trips:[]};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(method,path,body){const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw new Error(j.error||'Something went wrong');return j;}
-async function refresh(){try{S=await api('GET','/api/state');render();}catch(e){}}
-function render(){
- const h=S.hike||{};
- $('hikeSummary').textContent=[h.title,h.date,h.trailhead].filter(Boolean).join(' · ')||'Set up the hike below';
- if(document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
-  $('h_title').value=h.title||'';$('h_trailhead').value=h.trailhead||'';$('h_date').value=h.date||'';
-  $('h_startTime').value=h.startTime||'';$('h_notes').value=h.notes||'';
- }
- $('cars').innerHTML=S.cars.map(car=>{
-  const left=car.seatsTotal-car.passengers.length;
-  return `<section class="card"><h2>🚗 ${esc(car.driver)}'s car</h2>
-   <p><span class="seats ${left?'open':'full'}">${left?left+' seat'+(left>1?'s':'')+' left':'Full'}</span>
-   · ${car.passengers.length}/${car.seatsTotal} passengers</p>
-   <p><b>Meet:</b> ${esc(car.meetingPlace)||'—'} ${car.departureTime?('at <b>'+esc(car.departureTime)+'</b>'):''}</p>
-   ${car.phone?`<p class="small">Phone: ${esc(car.phone)}</p>`:''}${car.notes?`<p class="small">${esc(car.notes)}</p>`:''}
-   <ul>${car.passengers.map(p=>`<li><b>${esc(p.name)}</b>${p.pickup?(' — pickup: '+esc(p.pickup)):''} ${p.phone?esc(p.phone):''}
-     <button class="secondary" onclick="removePassenger('${car.id}','${p.id}')">Remove</button></li>`).join('')}</ul>
-   ${left?`<label>Passenger name <input id="p_name_${car.id}"></label>
-   <label>Where you need pickup <input id="p_pickup_${car.id}" placeholder="Address / corner"></label>
-   <label>Phone (optional) <input id="p_phone_${car.id}" type="tel"></label>
-   <button onclick="joinCar('${car.id}')">Claim a seat</button>`:''}
-   <div class="row"><button class="secondary" onclick="editMeeting('${car.id}')">Update meeting place/time</button>
-   <button class="danger" onclick="removeCar('${car.id}')">Remove car</button></div>
-  </section>`;}).join('')||'<section class="card">No cars yet — the first driver can add one above.</section>';
+const adminPin=()=>sessionStorage.getItem('hc2_admin')||'';
+const orgPin=tid=>sessionStorage.getItem('hc2_org_'+tid)||'';
+const myId=tid=>localStorage.getItem('hc2_me_'+tid)||'';
+const tripId=()=>{const m=location.hash.match(/^#trip\/([a-f0-9]+)/);return m?m[1]:null;};
+const trip=()=>S.trips.find(t=>t.id===tripId())||null;
+const isAdmin=()=>!!adminPin();
+const isOrg=t=>!!adminPin()||!!orgPin(t.id);
+const hiker=(t,id)=>t.hikers.find(h=>h.id===id);
+const carOfDriver=(t,hid)=>t.cars.find(c=>c.driverId===hid);
+const carOfPassenger=(t,hid)=>t.cars.find(c=>c.passengerIds.includes(hid));
+const me=t=>hiker(t,myId(t.id));
+
+async function api(method,path,body,tid){
+ const headers={'Content-Type':'application/json'};
+ if(adminPin())headers['X-Admin-Pin']=adminPin();
+ const t=tid||trip();
+ if(t&&orgPin(t.id||t))headers['X-Organizer-Pin']=orgPin(t.id||t);
+ const mid=tid?myId(tid):(trip()?myId(trip().id):'');
+ if(mid)headers['X-Hiker-Id']=mid;
+ const r=await fetch(path,{method,headers,body:body?JSON.stringify(body):undefined});
+ const j=await r.json();if(!r.ok)throw new Error(j.error||'Something went wrong');return j;
 }
-async function saveHike(){try{S=await api('PUT','/api/hike',{title:$('h_title').value,trailhead:$('h_trailhead').value,date:$('h_date').value,startTime:$('h_startTime').value,notes:$('h_notes').value});render();alert('Hike saved');}catch(e){alert(e.message)}}
-async function addCar(){try{S=await api('POST','/api/cars',{driver:$('c_driver').value,phone:$('c_phone').value,seatsTotal:$('c_seats').value,meetingPlace:$('c_meeting').value,departureTime:$('c_depart').value,notes:$('c_notes').value});render();}catch(e){alert(e.message)}}
-async function joinCar(cid){try{S=await api('POST',`/api/cars/${cid}/passengers`,{name:$('p_name_'+cid).value,pickup:$('p_pickup_'+cid).value,phone:$('p_phone_'+cid).value});render();}catch(e){alert(e.message)}}
-async function removePassenger(cid,pid){if(confirm('Remove this passenger?')){S=await api('DELETE',`/api/cars/${cid}/passengers/${pid}`);render();}}
-async function removeCar(cid){if(confirm('Remove this car and its passengers?')){S=await api('DELETE',`/api/cars/${cid}`);render();}}
-async function editMeeting(cid){const car=S.cars.find(c=>c.id===cid);const place=prompt('Meeting place',car.meetingPlace);if(place===null)return;const time=prompt('Departure time (HH:MM)',car.departureTime||'');if(time===null)return;S=await api('PATCH',`/api/cars/${cid}`,{meetingPlace:place,departureTime:time});render();}
-refresh(); setInterval(refresh,4000);
+async function refresh(){try{const n=await api('GET','/api/state',null,'');if(JSON.stringify(n)===JSON.stringify(S))return;if(busy())return; // don't clobber typing; next poll will pick it up
+ S=n;render();}catch(e){}}
+function busy(){const a=document.activeElement;return a&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName);}
+
+function render(){
+ const t=trip();
+ $('summary').textContent=t?([t.title,t.date,t.trailhead].filter(Boolean).join(' · ')||'Trip'):'Trips, cars and meeting points — one board per hike';
+ t?renderTrip(t):renderHome();
+}
+
+// ---------------- Home: list of trips ----------------
+function tripStats(t){
+ const free=t.cars.reduce((a,c)=>a+Math.max(0,c.seatsTotal-c.passengerIds.length),0);
+ const waiting=t.hikers.filter(h=>h.mode!=='driver'&&!carOfPassenger(t,h.id)).length;
+ return `${t.hikers.length} hikers · ${t.cars.length} cars · ${free} seats free · ${waiting} not in a car yet`;
+}
+function renderHome(){
+ let h='';
+ if(!S.trips.length)h+='<section class="card">No trips yet. An admin can create the first one below.</section>';
+ h+=S.trips.map(t=>`<section class="card trip" onclick="location.hash='#trip/${t.id}'">
+   <h2>${esc(t.title)||'Untitled trip'}</h2>
+   <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')||'Details to come'}</p>
+   <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b>${t.startTime?(' · Hike starts '+esc(t.startTime)):''}</p>
+   <p class="small">${tripStats(t)}</p>
+   ${isAdmin()?`<div class="row"><button class="small secondary" onclick="event.stopPropagation();assignOrganizer('${t.id}')">Assign / change organizer</button>
+   <button class="small danger" onclick="event.stopPropagation();deleteTrip('${t.id}')">Delete trip</button></div>`:''}
+ </section>`).join('');
+ h+='<section class="card"><h2>Admin</h2>';
+ if(!S.hasAdminPin){
+  h+=`<p class="small">No Admin PIN exists yet. Whoever sets it up first becomes the admin — pick a PIN and share it only with co-admins.</p>
+   <label>Choose an Admin PIN (4+ characters) <input id="a_pin1" type="password"></label>
+   <label>Repeat it <input id="a_pin2" type="password"></label>
+   <button onclick="setupAdmin()">Set up admin access</button>`;
+ } else if(!isAdmin()){
+  h+=`<label>Admin PIN <input id="a_pin" type="password"></label><button onclick="unlockAdmin()">Unlock admin</button>`;
+ } else {
+  h+=`<p>✅ You're unlocked as Admin on this device.</p>
+   <h3>Create a trip</h3>
+   <label>Trip title <input id="t_title" placeholder="e.g. Eagle Peak — Saturday"></label>
+   <label>Trailhead <input id="t_trailhead" placeholder="Trailhead name / address"></label>
+   <label>Date <input id="t_date" type="date"></label>
+   <label>Organizer's name <input id="t_org" placeholder="Who will run this trip?"></label>
+   <label>Organizer PIN for this trip (give it to the organizer) <input id="t_orgpin" type="text" placeholder="4+ characters"></label>
+   <button onclick="createTrip()">Create trip</button>
+   <div><button class="secondary" onclick="lockAdmin()">Lock admin on this device</button></div>`;
+ }
+ h+='</section>';
+ h+='<p class="small">Share this page\'s link with your hiking group. Hikers pick their own name on each trip — no accounts needed.</p>';
+ $('app').innerHTML=h;
+}
+async function setupAdmin(){
+ const p1=$('a_pin1').value,p2=$('a_pin2').value;
+ if(p1.length<4)return alert('PIN must be at least 4 characters');
+ if(p1!==p2)return alert('The two PINs do not match');
+ try{await api('POST','/api/admin/setup',{pin:p1},'');sessionStorage.setItem('hc2_admin',p1);S=await api('GET','/api/state',null,'');render();alert('Admin PIN set. You are now unlocked as Admin.');}catch(e){alert(e.message)}
+}
+async function unlockAdmin(){
+ const pin=$('a_pin').value;
+ try{await api('POST','/api/admin/verify',{pin},'');sessionStorage.setItem('hc2_admin',pin);render();}catch(e){alert(e.message)}
+}
+function lockAdmin(){sessionStorage.removeItem('hc2_admin');render();}
+async function createTrip(){
+ try{S=await api('POST','/api/trips',{title:$('t_title').value,trailhead:$('t_trailhead').value,date:$('t_date').value,organizerName:$('t_org').value,organizerPin:$('t_orgpin').value},'');render();alert('Trip created. Give the organizer their PIN so they can manage it.');}catch(e){alert(e.message)}
+}
+async function deleteTrip(tid){if(confirm('Delete this whole trip? This cannot be undone.')){try{S=await api('DELETE',`/api/trips/${tid}`,null,'');render();}catch(e){alert(e.message)}}}
+async function assignOrganizer(tid){
+ const name=prompt('Organizer\'s name for this trip:');if(name===null)return;
+ const pin=prompt('New Organizer PIN for this trip (leave empty to keep the current one):');
+ try{S=await api('POST',`/api/trips/${tid}/organizer`,{organizerName:name,organizerPin:pin||undefined},'');render();alert('Organizer updated.');}catch(e){alert(e.message)}
+}
+
+// ---------------- Trip board ----------------
+function statusTag(t,h){
+ if(t.organizerId===h.id)return '<span class="tag">Organizer</span>';
+ if(h.mode==='driver')return '<span class="tag">Driver 🚗</span>';
+ const c=carOfPassenger(t,h.id);
+ if(c){const d=hiker(t,c.driverId);return `<span class="tag">Riding with ${esc(d?d.name:'?')}</span>`;}
+ if(h.mode==='passenger')return '<span class="tag">Needs a ride</span>';
+ return '<span class="tag">Hasn\'t chosen yet</span>';
+}
+function renderTrip(t){
+ const mine=me(t), org=isOrg(t);
+ let h=`<p><a href="#">← All trips</a></p>`;
+ h+=`<section class="card"><h2>${esc(t.title)||'Untitled trip'}</h2>
+  <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')}</p>
+  <p><b>Hike meeting point:</b> ${esc(t.meetingPoint)||'—'}${t.startTime?(' · <b>Start:</b> '+esc(t.startTime)):''}</p>
+  <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b></p>
+  ${t.notes?`<p class="small">${esc(t.notes)}</p>`:''}</section>`;
+ // Organizer controls
+ if(org){
+  h+=`<section class="card"><h2>Trip details (organizer)</h2>
+   <label>Title <input id="e_title" value="${esc(t.title)}"></label>
+   <label>Trailhead <input id="e_trailhead" value="${esc(t.trailhead)}"></label>
+   <div class="row"><label style="flex:1">Date <input id="e_date" type="date" value="${esc(t.date)}"></label>
+   <label style="flex:1">Hike start time <input id="e_start" type="time" value="${esc(t.startTime)}"></label></div>
+   <label>Hike meeting point <input id="e_meet" value="${esc(t.meetingPoint)}" placeholder="Where everyone gathers at the trailhead"></label>
+   <label>Notes <textarea id="e_notes" rows="2">${esc(t.notes)}</textarea></label>
+   <button onclick="saveTrip('${t.id}')">Save trip details</button></section>
+   <section class="card"><h2>Roster (organizer)</h2>
+   <label>New hiker's name <input id="r_name" placeholder="Add a hiker to this trip"></label>
+   <button onclick="addHiker('${t.id}')">Add hiker</button></section>`;
+ } else {
+  h+=`<section class="card"><h2>Organizer</h2><p class="small">Only this trip's organizer (or an admin) can edit trip details and the roster.</p>
+   <label>Organizer PIN <input id="o_pin" type="password"></label>
+   <button class="secondary" onclick="unlockOrg('${t.id}')">Unlock organizer powers</button></section>`;
+ }
+ // Who are you
+ h+=`<section class="card"><h2>Who are you?</h2>
+  <label>Pick your name (the organizer adds hikers to the roster)
+  <select id="meSel" onchange="setMe('${t.id}',this.value)"><option value="">— choose your name —</option>
+  ${t.hikers.map(x=>`<option value="${x.id}" ${mine&&mine.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+  ${mine?myPanel(t,mine):'<p class="small">Pick your name to choose driving or riding, and to claim a seat.</p>'}</section>`;
+ // Roster
+ h+=`<section class="card"><h2>Hikers (${t.hikers.length})</h2><ul>
+  ${t.hikers.map(x=>`<li><b>${esc(x.name)}</b>${statusTag(t,x)}${org?` <button class="small danger" onclick="removeHiker('${t.id}','${x.id}')">Remove</button>`:''}</li>`).join('')||'<li class="small">No hikers yet.</li>'}
+ </ul></section>`;
+ // Not in a car yet
+ const waiting=t.hikers.filter(x=>x.mode!=='driver'&&!carOfPassenger(t,x.id));
+ if(waiting.length){
+  h+=`<section class="card"><h2>Not in a car yet</h2><ul>${waiting.map(x=>{
+   const canAct=org||(mine&&mine.id===x.id)||(mine&&carOfDriver(t,mine.id));
+   let ctl='';
+   if(canAct){
+    const opts=t.cars.filter(c=>c.passengerIds.length<c.seatsTotal).map(c=>`<option value="${c.id}">${esc(hiker(t,c.driverId)?.name||'')}’s car (${c.seatsTotal-c.passengerIds.length} free)</option>`).join('');
+    if(opts)ctl=` <select id="as_${x.id}" style="width:auto">${opts}</select> <button class="small" onclick="assign('${t.id}','${x.id}',document.getElementById('as_${x.id}').value)">Assign</button>`;
+   }
+   return `<li><b>${esc(x.name)}</b>${statusTag(t,x)}${ctl}</li>`;}).join('')}</ul></section>`;
+ }
+ // Cars
+ h+=t.cars.map(c=>carCard(t,c,mine,org)).join('')||'<section class="card">No cars yet. The first driver can add one from “Who are you?” above.</section>';
+ h+='<p class="small">This page refreshes itself every few seconds. Share the link only with your hiking group.</p>';
+ $('app').innerHTML=h;
+}
+function myPanel(t,mine){
+ const myCar=carOfDriver(t,mine.id), riding=carOfPassenger(t,mine.id);
+ let h='';
+ if(myCar){
+  h+=`<p>🚗 You're driving. ${myCar.passengerIds.length}/${myCar.seatsTotal} seats taken.<br>
+   <b>Meet:</b> ${esc(myCar.meetingPlace)||'—'}${myCar.departureTime?(' at '+esc(myCar.departureTime)):''}</p>
+   <div class="row"><button class="secondary" onclick="editCar('${t.id}','${myCar.id}')">Update my car</button>
+   <button class="danger" onclick="stopDriving('${t.id}')">Stop driving — I need a ride</button></div>`;
+ } else {
+  if(riding){const d=hiker(t,riding.driverId);h+=`<p>🎒 You're riding with <b>${esc(d?d.name:'')}</b>. Meet: ${esc(riding.meetingPlace)||'—'}${riding.departureTime?(' at '+esc(riding.departureTime)):''}</p>
+   <button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave that car</button>`;}
+  else h+=`<p>You\'re not in a car yet.</p>`;
+  h+=`<h3>I\'ll drive</h3>
+   <label>Seats available for passengers <input id="c_seats" type="number" min="1" max="12" value="3"></label>
+   <label>Meeting place <input id="c_meeting" placeholder="Where passengers meet you"></label>
+   <label>Departure time <input id="c_depart" type="time"></label>
+   <label>Notes <input id="c_notes" placeholder="e.g. Blue Subaru, room for packs"></label>
+   <button onclick="addCar('${t.id}')">Add my car</button>
+   ${mine.mode!=='passenger'?`<div><button class="secondary" onclick="needRide('${t.id}')">I need a ride (I\'m a passenger)</button></div>`:''}`;
+ }
+ return h;
+}
+function carCard(t,c,mine,org){
+ const d=hiker(t,c.driverId), left=c.seatsTotal-c.passengerIds.length;
+ const iDrive=mine&&mine.id===c.driverId, iRide=mine&&c.passengerIds.includes(mine.id);
+ let h=`<section class="card"><h2>🚗 ${esc(d?d.name:'?')}'s car</h2>
+  <p><span class="seats ${left?'open':'full'}">${left?left+' seat'+(left>1?'s':'')+' left':'Full'}</span> · ${c.passengerIds.length}/${c.seatsTotal} passengers</p>
+  <p><b>Meet:</b> ${esc(c.meetingPlace)||'—'}${c.departureTime?(' at <b>'+esc(c.departureTime)+'</b>'):''}</p>
+  ${c.notes?`<p class="small">${esc(c.notes)}</p>`:''}
+  <ul>${c.passengerIds.map(pid=>{const x=hiker(t,pid);const can=(org||iDrive||(mine&&mine.id===pid));
+   return `<li><b>${esc(x?x.name:'?')}</b>${can?` <button class="small secondary" onclick="assign('${t.id}','${pid}',null)">Remove</button>`:''}</li>`;}).join('')||'<li class="small">No passengers yet.</li>'}</ul>`;
+ if(mine&&!iDrive&&!iRide&&left>0)h+=`<button onclick="assign('${t.id}','${mine.id}','${c.id}')">Ride in this car</button>`;
+ if(iRide)h+=`<button class="secondary" onclick="assign('${t.id}','${mine.id}',null)">Leave this car</button>`;
+ if(org||iDrive)h+=`<div class="row"><button class="secondary" onclick="editCar('${t.id}','${c.id}')">Update meeting place/time</button><button class="danger" onclick="removeCar('${t.id}','${c.id}')">Remove car</button></div>`;
+ return h+'</section>';
+}
+function setMe(tid,hid){if(hid)localStorage.setItem('hc2_me_'+tid,hid);else localStorage.removeItem('hc2_me_'+tid);render();}
+async function unlockOrg(tid){
+ const pin=$('o_pin').value;
+ try{await api('PUT',`/api/trips/${tid}/organizer`,{pin},tid);sessionStorage.setItem('hc2_org_'+tid,pin);render();alert('Organizer powers unlocked on this device.');}catch(e){alert(e.message)}
+}
+async function saveTrip(tid){try{S=await api('PATCH',`/api/trips/${tid}`,{title:$('e_title').value,trailhead:$('e_trailhead').value,date:$('e_date').value,startTime:$('e_start').value,meetingPoint:$('e_meet').value,notes:$('e_notes').value},tid);render();alert('Trip saved');}catch(e){alert(e.message)}}
+async function addHiker(tid){try{S=await api('POST',`/api/trips/${tid}/hikers`,{name:$('r_name').value},tid);render();}catch(e){alert(e.message)}}
+async function removeHiker(tid,hid){if(confirm('Remove this hiker from the trip? If they drive, their passengers will become unassigned.')){try{S=await api('DELETE',`/api/trips/${tid}/hikers/${hid}`,null,tid);render();}catch(e){alert(e.message)}}}
+async function addCar(tid){const m=me(trip());if(!m)return alert('Pick your name first');try{S=await api('POST',`/api/trips/${tid}/cars`,{driverId:m.id,seatsTotal:$('c_seats').value,meetingPlace:$('c_meeting').value,departureTime:$('c_depart').value,notes:$('c_notes').value},tid);render();}catch(e){alert(e.message)}}
+async function editCar(tid,cid){const t=trip();const car=t.cars.find(c=>c.id===cid);const seats=prompt('Seats available for passengers',car.seatsTotal);if(seats===null)return;const place=prompt('Meeting place',car.meetingPlace);if(place===null)return;const time=prompt('Departure time (HH:MM)',car.departureTime||'');if(time===null)return;try{S=await api('PATCH',`/api/trips/${tid}/cars/${cid}`,{seatsTotal:seats,meetingPlace:place,departureTime:time},tid);render();}catch(e){alert(e.message)}}
+async function removeCar(tid,cid){if(confirm('Remove this car? Its passengers will become unassigned.')){try{S=await api('DELETE',`/api/trips/${tid}/cars/${cid}`,null,tid);render();}catch(e){alert(e.message)}}}
+async function stopDriving(tid){if(confirm('Give up your car and become a passenger? Your passengers will become unassigned.')){try{S=await api('POST',`/api/trips/${tid}/ride`,{hikerId:myId(tid)},tid);render();}catch(e){alert(e.message)}}}
+async function needRide(tid){try{S=await api('POST',`/api/trips/${tid}/ride`,{hikerId:myId(tid)},tid);render();}catch(e){alert(e.message)}}
+async function assign(tid,pid,cid){
+ const t=trip();const mine=me(t);
+ if(cid&&mine&&carOfDriver(t,mine.id)&&mine.id===pid&&!confirm('You are a driver. Joining this car will remove your own car and unassign your passengers. Continue?'))return;
+ try{S=await api('POST',`/api/trips/${tid}/assign`,{passengerId:pid,carId:cid},tid);render();}catch(e){alert(e.message)}
+}
+window.addEventListener('hashchange',render);
+refresh(); setInterval(refresh,5000);
 </script></body></html>
