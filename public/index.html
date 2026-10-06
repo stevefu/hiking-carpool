@@ -16,6 +16,12 @@
  .tag{display:inline-block;background:#e7ede7;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:600;margin-left:6px}
  .trip{cursor:pointer} .trip h2{margin:0 0 6px} a{color:#2e5d34}
  ul{margin:6px 0;padding-left:20px}
+ .sect{margin:20px 2px 10px;font-size:19px}
+ table{width:100%;border-collapse:collapse;font-size:14px}
+ th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #e3e9e3;vertical-align:top}
+ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#555}
+ .you-name{font-size:22px;font-weight:800}
+ select.bigswitch{font-size:18px;font-weight:700;padding:14px;border:2px solid #2e5d34;border-radius:10px;background:#eef4ee}
 </style></head><body>
 <header><h1 id="hdr">🥾 Hiking Carpool</h1><div id="summary">Loading…</div></header>
 <main id="app">Loading…</main>
@@ -91,43 +97,60 @@ function renderHome(){
 function renderTrip(t){
  const mine=me(t);
  let h=`<p><a href="#" onclick="location.hash='';return false;">← All trips</a></p>`;
- h+=`<section class="card"><h2>${esc(t.title)||'Untitled trip'}</h2>
+ h+=`<h2 class="sect">🥾 Hike info</h2>
+ <section class="card"><h2>${esc(t.title)||'Untitled trip'}</h2>
   <p>${[t.date,t.trailhead].filter(Boolean).map(esc).join(' · ')}</p>
   <p><b>Hike meeting point:</b> ${esc(t.meetingPoint)||'—'}${t.startTime?(' · <b>Start:</b> '+esc(t.startTime)):''}</p>
   <p class="small">Organized by <b>${esc(t.organizerName)||'—'}</b></p>
-  ${t.notes?`<p class="small">${esc(t.notes)}</p>`:''}</section>`;
+  ${t.notes?`<p class="small">${esc(t.notes)}</p>`:''}
+  <p><b>${t.hikers.length} ${t.hikers.length===1?'person':'people'} signed up</b>${t.maxParticipants?(' of max '+t.maxParticipants):''} · ${t.cars.length} car${t.cars.length===1?'':'s'}</p></section>`;
+ h+=`<section class="card"><h2>Who's signed up</h2>${signupTable(t,mine)}</section>`;
+ h+=`<h2 class="sect">👤 Your controls</h2>`;
  h+=identityCard(t,mine);
- h+=`<section class="card"><h2>Hikers (${t.hikers.length}${t.maxParticipants?(' of max '+t.maxParticipants):''})</h2><ul>
-  ${t.hikers.map(x=>`<li><b>${esc(x.name)}</b>${statusTag(t,x)}</li>`).join('')||'<li class="small">No hikers yet.</li>'}
- </ul></section>`;
- const waiting=t.hikers.filter(x=>x.mode!=='driver'&&!carOfPassenger(t,x.id));
- if(waiting.length){
-  h+=`<section class="card"><h2>Not in a car yet</h2><ul>${waiting.map(x=>`<li><b>${esc(x.name)}</b>${statusTag(t,x)}</li>`).join('')}</ul>
-  <p class="small">If that\u2019s you, pick your name above, then claim a seat in any car with space below.</p></section>`;
- }
  h+=t.cars.map(c=>carCard(t,c,mine)).join('')||'<section class="card">No cars yet. Drivers can add one after picking their name and choosing the Driver role above.</section>';
  h+='<p class="small">This page refreshes itself every few seconds.</p>';
  $('app').innerHTML=h;
 }
+function signupTable(t,mine){
+ if(!t.hikers.length)return '<p class="small">Nobody has signed up yet.</p>';
+ const rows=t.hikers.map(hh=>{
+  const ownCar=carOfDriver(t,hh.id), rideCar=carOfPassenger(t,hh.id);
+  const role=t.organizerId===hh.id?'Organizer':hh.mode==='driver'?'Driver 🚗':hh.mode==='passenger'?'Passenger 🎒':'Hasn\u2019t chosen';
+  let car='—';
+  if(ownCar){const free=ownCar.seatsTotal-ownCar.passengerIds.length;car=`Own car · ${ownCar.passengerIds.length}/${ownCar.seatsTotal} seats filled${free?(' · '+free+' free'):''}`;}
+  else if(rideCar){const d=hiker(t,rideCar.driverId);car=`Riding with ${esc(d?d.name:'?')}`;}
+  else if(hh.mode==='passenger')car='Waiting for a car';
+  else if(hh.mode==='driver')car='Driver — no car added yet';
+  return `<tr><td><b>${esc(hh.name)}</b>${mine&&mine.id===hh.id?' <span class="tag">you</span>':''}</td><td>${role}</td><td>${car}</td></tr>`;
+ }).join('');
+ return `<table><tr><th>Hiker</th><th>Role</th><th>Car</th></tr>${rows}</table>`;
+}
+function userSwitch(t,selectedId){
+ return `<label>Switch to another user
+  <select class="bigswitch" onchange="setMe('${t.id}',this.value)">
+  <option value="">— pick who you are —</option>
+  ${t.hikers.map(x=>`<option value="${x.id}" ${selectedId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
+  </select></label>`;
+}
 function identityCard(t,mine){
  if(mine){
-  return `<section class="card"><h2>You are ${esc(mine.name)}</h2>
+  return `<section class="card"><p class="small" style="margin:0">You are using this page as</p>
+   <div class="you-name">${esc(mine.name)}</div>
+   ${userSwitch(t,mine.id)}
    <div class="row">
     <button class="secondary" onclick="editMyInfo('${t.id}')">Edit my info</button>
     <button class="danger" onclick="removeMyself('${t.id}')">Remove myself</button>
    </div>
-   <p class="small">Not you? <a href="#" onclick="setMe('${t.id}','');return false;">Pick a different name</a> — that only changes this device, it doesn't remove anyone.</p>
    ${myPanel(t,mine)}</section>`;
  }
  const full=t.maxParticipants&&t.hikers.length>=t.maxParticipants;
- return `<section class="card"><h2>Join this trip</h2>
+ return `<section class="card"><h2>Who are you?</h2>
+  <p class="small">You haven't picked who you are on this device yet — everything in this section is about <b>you</b>, once you do.</p>
   ${full?`<p>🚫 This trip is full (max ${t.maxParticipants} participants). If a spot opens up, you'll be able to add yourself here.</p>`
    :`<label>New here? Add yourself to the trip
      <input id="j_name" placeholder="Your name"></label>
      <button onclick="joinTrip('${t.id}')">Add myself</button>`}
-  <label>Already on the roster? Pick your name
-  <select onchange="setMe('${t.id}',this.value)"><option value="">— choose your name —</option>
-  ${t.hikers.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select></label>
+  ${userSwitch(t,'')}
  </section>`;
 }
 async function joinTrip(tid){
