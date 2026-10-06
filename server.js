@@ -308,6 +308,29 @@ const server = http.createServer(async (req, res) => {
       h.mode = 'passenger';
       save(); return send(res, 200, publicState());
     }
+
+    const modeMatch = p.match(/^\/api\/trips\/([a-f0-9]+)\/mode$/);
+    if (modeMatch && req.method === 'POST') { // explicit role choice: 'driver' | 'passenger'
+      const trip = getTrip(modeMatch[1]);
+      if (!trip) return send(res, 404, { error: 'Trip not found' });
+      const b = await readBody(req);
+      const hid = clean(b.hikerId, 40);
+      const h = getHiker(trip, hid);
+      if (!h) return send(res, 400, { error: 'Hiker not found' });
+      if (!isOrganizer(req, trip) && actorId(req) !== hid)
+        return send(res, 401, { error: 'You can only change your own role' });
+      if (b.mode !== 'driver' && b.mode !== 'passenger')
+        return send(res, 400, { error: 'Choose driver or passenger' });
+      if (b.mode === 'driver') {
+        removeFromCars(trip, hid);          // a driver rides in no one's car
+        h.mode = 'driver';                  // car itself is added separately
+      } else {
+        const car = carOfDriver(trip, hid); // a passenger gives up their car
+        if (car) deleteCar(trip, car);
+        h.mode = 'passenger';
+      }
+      save(); return send(res, 200, publicState());
+    }
     const assignMatch = p.match(/^\/api\/trips\/([a-f0-9]+)\/assign$/);
     if (assignMatch && req.method === 'POST') {
       const trip = getTrip(assignMatch[1]);
